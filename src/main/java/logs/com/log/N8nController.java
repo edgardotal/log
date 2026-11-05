@@ -4,6 +4,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -12,12 +13,15 @@ import java.util.stream.Collectors;
 @RequestMapping("/api")
 public class N8nController {
 
-    // Simulamos la base de datos con mapas en memoria
     private final List<LogEntry> logDatabase = new ArrayList<>();
     private final Map<String, AnalysisResult> analysisDatabase = new HashMap<>();
     
-    // IMPORTANTE: Cambia esto por tu URL de producción de n8n
+    // URL de n8n
     private final String N8N_WEBHOOK_URL = "https://n8n-service-s9ad.onrender.com/webhook/miworkflow";
+    
+    // URL de tu API en Render (para que n8n nos devuelva el resultado)
+    // IMPORTANTE: Render te asigna una URL. Asegúrate de que sea la tuya.
+    private final String MY_API_URL = "https://log-4t0m.onrender.com/api/logs/callback";
 
     @GetMapping("/health")
     public ResponseEntity<Map<String, String>> health() {
@@ -57,27 +61,45 @@ public class N8nController {
             return ResponseEntity.badRequest().body("No se enviaron logs para analizar");
         }
 
-        try {
-            // CONFIGURACIÓN DE TIMEOUT PARA EVITAR EL ERROR 502
-            org.springframework.http.client.SimpleClientHttpRequestFactory factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
-            factory.setConnectTimeout(60000); // 60 segundos para conectar
-            factory.setReadTimeout(120000);   // 120 segundos para leer la respuesta de Gemini
-            RestTemplate restTemplate = new RestTemplate(factory);
-            
-            // Enviamos los logs a n8n
-            String n8nResponse = restTemplate.postForObject(N8N_WEBHOOK_URL, logsToAnalyze, String.class);
-            
-            // Generamos un ID para el análisis y lo guardamos
-            String analysisId = UUID.randomUUID().toString();
-            AnalysisResult result = new AnalysisResult(analysisId, n8nResponse, "COMPLETED");
-            analysisDatabase.put(analysisId, result);
+        String analysisId = UUID.randomUUID().toString();
+        AnalysisResult result = new AnalysisResult(analysisId, "Análisis en proceso...", "PROCESSING");
+        analysisDatabase.put(analysisId, result);
 
-            return ResponseEntity.ok(result);
-            
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body("Error al conectar con n8n: " + e.getMessage());
+        // Enviamos a n8n de forma asíncrona
+        Map<String, Object> payloadToN8n = new HashMap<>();
+        payloadToN8n.put("analysisId", analysisId);
+        payloadToN8n.put("logs", logsToAnalyze);
+        payloadToN8n.put("callbackUrl", MY_API_URL); // Le decimos a n8n a dónde responder
+
+        new Thread(() -> {
+            try {
+                RestTemplate restTemplate = new RestTemplate();
+                restTemplate.postForObject(N8N_WEBHOOK_URL, payloadToN8n, String.class);
+            } catch (Exception e) {
+                System.err.println("Error enviando a n8n: " + e.getMessage());
+            }
+        }).start();
+
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+            .body("Petición aceptada. Análisis en curso. Consulte el resultado en: /api/analysis/" + analysisId);
+    }
+
+    // ESTE ES EL NUEVO ENDPOINT QUE N8N USARÁ PARA DEVOLVER EL RESULTADO
+    @PostMapping("/logs/callback")
+    public ResponseEntity<?> receiveAnalysisFromN8n(@RequestBody Map<String, String> payload) {
+        String analysisId = payload.get("analysisId");
+        String aiResponse = payload.get("aiResponse");
+        
+        if (analysisId == null || aiResponse == null) {
+            return ResponseEntity.badRequest().body("Faltan datos en el callback");
         }
+
+        AnalysisResult result = analysisDatabase.get(analysisId);
+        if (result != null) {
+            analysisDatabase.put(analysisId, new AnalysisResult(analysisId, aiResponse, "COMPLETED"));
+            return ResponseEntity.ok("Resultado guardado exitosamente");
+        }
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body("ID de análisis no encontrado");
     }
 
     @GetMapping("/analysis/{id}")
