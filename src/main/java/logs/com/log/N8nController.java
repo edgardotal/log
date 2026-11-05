@@ -18,7 +18,7 @@ public class N8nController {
         try {
             RestTemplate restTemplate = new RestTemplate();
             // Aquí luego pondremos la URL de n8n
-            String N8N_WEBHOOK_URL = "http://localhost:5678/webhook-test/mi-flujo"; 
+            String N8N_WEBHOOK_URL = "https://n8n-service-s9ad.onrender.com/webhook/miworkflow";
             String respuesta = restTemplate.postForObject(N8N_WEBHOOK_URL, datos, String.class);
             return "Flujo disparado. Respuesta: " + respuesta;
         } catch (Exception e) {
