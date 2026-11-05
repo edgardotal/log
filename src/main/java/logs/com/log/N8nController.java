@@ -58,7 +58,12 @@ public class N8nController {
         }
 
         try {
-            RestTemplate restTemplate = new RestTemplate();
+            // CONFIGURACIÓN DE TIMEOUT PARA EVITAR EL ERROR 502
+            org.springframework.http.client.SimpleClientHttpRequestFactory factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+            factory.setConnectTimeout(60000); // 60 segundos para conectar
+            factory.setReadTimeout(120000);   // 120 segundos para leer la respuesta de Gemini
+            RestTemplate restTemplate = new RestTemplate(factory);
+            
             // Enviamos los logs a n8n
             String n8nResponse = restTemplate.postForObject(N8N_WEBHOOK_URL, logsToAnalyze, String.class);
             
