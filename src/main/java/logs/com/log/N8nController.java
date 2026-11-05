@@ -13,16 +13,20 @@ public class N8nController {
         return "¡Hola! La API de Spring Boot está funcionando.";
     }
 
-    @PostMapping("/disparar")
+      @PostMapping("/disparar")
     public String dispararFlujo(@RequestBody Map<String, Object> datos) {
         try {
             RestTemplate restTemplate = new RestTemplate();
-            // Aquí luego pondremos la URL de n8n
-            String N8N_WEBHOOK_URL = "https://n8n-service-s9ad.onrender.com/webhook/miworkflow";
-            String respuesta = restTemplate.postForObject(N8N_WEBHOOK_URL, datos, String.class);
-            return "Flujo disparado. Respuesta: " + respuesta;
+            String n8nUrl = "https://n8n-service-s9ad.onrender.com/webhook/miworkflow";
+            
+            // Hacemos la petición a n8n
+            String respuestaN8n = restTemplate.postForObject(n8nUrl, datos, String.class);
+            
+            // Si n8n devuelve algo, lo mostramos de forma limpia
+            return "✅ Flujo disparado con éxito. Datos enviados: " + datos.toString();
+            
         } catch (Exception e) {
-            return "Error al conectar con n8n: " + e.getMessage();
+            return "❌ Error al conectar con n8n: " + e.getMessage();
         }
     }
 }
